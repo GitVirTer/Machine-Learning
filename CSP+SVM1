@@ -2,7 +2,7 @@ clear;
 %load('B0403T_4_40.mat');
 load('dataset_BCIcomp1.mat')
 load('labels_data_set_iii.mat')
-
+%生成训练集和测试集
 data = x_train;
 label = y_train;
 dataTst = x_test;
