@@ -1,0 +1,121 @@
+clear;
+%load('B0403T_4_40.mat');
+load('dataset_BCIcomp1.mat')
+load('labels_data_set_iii.mat')
+
+data = x_train;
+label = y_train;
+dataTst = x_test;
+labelTst = y_test;
+
+datatmp = zeros(size(data,2),size(data,1),size(data,3));
+for i = 1:size(data,3)
+    datatmp(:,:,i) = data(:,:,i)';
+end
+data = datatmp;
+
+datatmp = zeros(size(dataTst,2),size(dataTst,1),size(dataTst,3));
+for i = 1:size(dataTst,3)
+    datatmp(:,:,i) = dataTst(:,:,i)';
+end
+dataTst = datatmp;
+
+D1=size(data,1);D2=size(data,2);D3=size(data,3);L=2;
+N1=140;N2=140; 
+ 
+%L:W取前L列向量。N1：训练样本对数。N2：测试样本对数。
+%%%%%%%%%%%%%%%%%%%%%%%%%%  A = rand(9,9);[V,D] = eig(A);diag(D);[d,idx] = sort(diag(D),'descend');
+%数据按左右运动想象分成1,2；按训练测试分成w，t
+j=1;k=1;
+for i=1:N1
+    if label(i)==1
+        c1(j)=i;j=j+1;
+    else
+        c2(k)=i;k=k+1;
+    end
+end
+j=1;k=1;
+for i=1:N2
+    if labelTst(i)==1
+        d1(j)=i;j=j+1;
+    else
+        d2(k)=i;k=k+1;
+    end
+end
+N1=numel(c1);
+N2=numel(d1); 
+for i=1:N1
+    w1(:,:,i)=data(:,:,c1(i));  %训练集中第一类数据（想象左边）
+    w2(:,:,i)=data(:,:,c2(i));  %训练集中第二类数据（想象右边）
+end
+for i=1:N2
+    t1(:,:,i)=dataTst(:,:,d1(i));   %测试集中第一类数据（想象左边）
+    t2(:,:,i)=dataTst(:,:,d2(i));   %测试集中第二类数据（想象右边）
+end
+%CSP学W
+W = CSP_func(w1,w2);
+W1=W(:,[1:0.5*L end-0.5*L+1:end]);
+%特征提取
+for i=1:N1
+    f1(:,:,i)=W1'*w1(:,:,i);
+    f2(:,:,i)=W1'*w2(:,:,i);
+end
+for i=1:N2
+    g1(:,:,i)=W1'*t1(:,:,i);
+    g2(:,:,i)=W1'*t2(:,:,i);
+end
+
+%% 分类
+%对投影后的样本求方差
+ff1=[];ff2=[];
+for i=1:N1
+    ff1=[ff1 var(f1(:,:,i),0,2)];
+    ff2=[ff2 var(f2(:,:,i),0,2)];
+end
+gg1=[];gg2=[];
+for i=1:N2
+    gg1=[gg1 var(g1(:,:,i),0,2)];
+    gg2=[gg2 var(g2(:,:,i),0,2)];
+end
+% ff = cat(2,ff1,ff2);
+% res = [ones(70,1);2*ones(70,1)];
+% svmModel = svmtrain(ff',res,'kernel_function','linear','showplot',true);    
+% gg = cat(2,gg1,gg2);
+% classification=svmclassify(svmModel,gg','Showplot',true);
+% bad = find(classification ~= res);
+% er = numel(bad)/size(res,1);
+% accsvm = 1-er;
+%% LDA分类
+M1=mean(ff1,2);
+M2=mean(ff2,2);
+S1=zeros(L,L);S2=zeros(L,L);
+for i=1:N1
+    S1=S1+(ff1(:,i)-M1)*(ff1(:,i)-M1)';
+end
+for i=1:N1
+    S2=S2+(ff2(:,i)-M2)*(ff2(:,i)-M2)';
+end
+SW=S1+S2;
+Wf=(inv(SW))*(M2-M1);
+B=-Wf'*(0.5*M1+0.5*M2);
+
+count1=0;count2=0;
+for i=1:N2
+    if Wf'*(gg1(:,i))+B<0
+        count1=count1+1;
+    end
+end
+for i=1:N2
+    if Wf'*(gg2(:,i))+B>0
+        count2=count2+1;
+    end
+end
+acc=(count1+count2)/(2*N2)
+
+figure;
+scatter(ff1(1,:),ff1(2,:),'r+')
+hold on;
+scatter(ff2(1,:),ff2(2,:),'b')
+hold on;
+syms x1 x2
+ezplot(Wf'*[x1;x2]+B)
